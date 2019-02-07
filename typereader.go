@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/davecgh/go-spew/spew"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -178,12 +179,25 @@ func readAstStarExpr(v *Value, starExpr *ast.StarExpr, fileImports fileImportSpe
 func readAstMapType(m *Map, mapType *ast.MapType, fileImports fileImportSpecMap) {
 	trace("		map key", mapType.Key, reflect.ValueOf(mapType.Key).Type().String())
 	trace("		map value", mapType.Value, reflect.ValueOf(mapType.Value).Type().String())
+
 	// key
 	switch reflect.ValueOf(mapType.Key).Type().String() {
 	case "*ast.Ident":
 		_, scalarType := getTypesFromAstType(mapType.Key.(*ast.Ident))
-		m.KeyType = string(scalarType)
+		m.KeyType = ScalarType(scalarType)
+		spew.Dump(mapType)
+	case "*ast.SelectorExpr":
+		selectorExpr := mapType.Key.(*ast.SelectorExpr)
+		for _, fileImport := range fileImports {
+			//fmt.Println("selectorExpr.X.(*ast.Ident).String() == fileImport.alias", selectorExpr.X.(*ast.Ident).String(), fileImport.alias)
+			if selectorExpr.X.(*ast.Ident).String() == fileImport.alias {
+				m.MissingScalarKeyType = fileImport.path + "." + selectorExpr.Sel.Name
+				break
+			}
+		}
+		spew.Dump("----------------------------------> key for", m.KeyType, mapType) //, selectorExpr, mapType, fileImports)
 	default:
+		// HERE JAN FIX
 		// todo: implement support for "*ast.Scalar" type (sca)
 		// this is important for scalar types in map keys
 		// Example:
@@ -203,7 +217,8 @@ func readAstMapType(m *Map, mapType *ast.MapType, fileImports fileImportSpecMap)
 		//	})
 		//})
 
-		//fmt.Println("--------------------------->", reflect.ValueOf(mapType.Key).Type().String())
+		// fmt.Println("--------------------------->", reflect.ValueOf(mapType.Key).Type().String())
+
 	}
 	// value
 	m.Value.loadExpr(mapType.Value, fileImports)
@@ -283,6 +298,8 @@ func (v *Value) loadExpr(expr ast.Expr, fileImports fileImportSpecMap) {
 		readAstStructType(v, expr.(*ast.StructType), fileImports)
 	case "*ast.InterfaceType":
 		readAstInterfaceType(v, expr.(*ast.InterfaceType), fileImports)
+	case "*ast.FuncType", "*ast.ChanType":
+		// explicitly skipped
 	default:
 		trace("what kind of field ident would that be ?!", reflect.ValueOf(expr).Type().String())
 	}

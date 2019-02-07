@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 func (sl ServiceList) Len() int           { return len(sl) }
@@ -227,6 +229,7 @@ func Read(
 	}
 	trace("missing")
 	traceData(missingTypes)
+	spew.Dump(missingTypes)
 
 	structs = map[string]*Struct{}
 	scalars = map[string]*Scalar{}
@@ -237,10 +240,13 @@ func Read(
 	}
 	trace("---------------- found structs -------------------")
 	traceData(structs)
+	//spew.Dump(structs)
+	//spew.Dump(scalars)
 	trace("---------------- /found structs -------------------")
 	trace("---------------- found scalars -------------------")
 	traceData(scalars)
 	trace("---------------- /found scalars -------------------")
+	// collect contsants
 	constants = map[string]map[string]*ast.BasicLit{}
 	for _, structDef := range structs {
 		if structDef != nil {
@@ -307,6 +313,7 @@ func collectTypes(goPaths []string, missingTypes map[string]bool, structs map[st
 
 	for typesPending(structs, scalars, missingTypes) {
 		trace("pending", missingTypeNames())
+		fmt.Println("......>", missingTypeNames())
 		for fullName, typeIsMissing := range missingTypes {
 			if !typeIsMissing {
 				continue
@@ -421,20 +428,42 @@ func (s *Struct) DepsSatisfied(missingTypes map[string]bool, structs map[string]
 		}
 		return false
 	}
-	for _, field := range s.Fields {
-		var fieldStructType *StructType
-		fieldStructType = nil
-		if field.Value.StructType != nil {
-			fieldStructType = field.Value.StructType
-		} else if field.Value.Array != nil && field.Value.Array.Value.StructType != nil {
-			fieldStructType = field.Value.Array.Value.StructType
-		} else if field.Value.Map != nil && field.Value.Map.Value.StructType != nil {
-			fieldStructType = field.Value.Map.Value.StructType
-		}
-		if fieldStructType != nil {
-			if needsWork(fieldStructType.FullName()) {
-				return false
+	checkFields := func(fields []*Field) (satisfied bool) {
+		for _, field := range fields {
+			var fieldStructType *StructType
+			fieldStructType = nil
+			if field.Value.StructType != nil {
+				fieldStructType = field.Value.StructType
+			} else if field.Value.Array != nil && field.Value.Array.Value.StructType != nil {
+				fieldStructType = field.Value.Array.Value.StructType
+			} else if field.Value.Map != nil && field.Value.Map.Value.StructType != nil {
+				fieldStructType = field.Value.Map.Value.StructType
 			}
+			if fieldStructType != nil {
+				if needsWork(fieldStructType.FullName()) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	if !checkFields(s.Fields) {
+		return false
+	}
+
+	if s.Map != nil {
+		mapNeedsWork := false
+		if s.Map.Value != nil && s.Map.Value.Struct != nil {
+			mapNeedsWork = !checkFields(s.Map.Value.Struct.Fields)
+		}
+		if s.Map.Value != nil && s.Map.Value.StructType != nil && needsWork(s.Map.Value.StructType.FullName()) {
+			mapNeedsWork = true
+		}
+		if s.Map.MissingScalarKeyType != "" && needsWork(s.Map.MissingScalarKeyType) {
+			mapNeedsWork = true
+		}
+		if mapNeedsWork {
+			return false
 		}
 	}
 	if s.Array != nil {

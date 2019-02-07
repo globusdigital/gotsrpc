@@ -27,7 +27,7 @@ func (v *Value) tsType(mappings config.TypeScriptMappings, scalarTypes map[strin
 
 	switch true {
 	case v.Map != nil:
-		ts.app("{[index:" + v.Map.KeyType + "]:")
+		ts.app("{[index:" + tsTypeFromScalarType(v.Map.KeyType) + "]:")
 		v.Map.Value.tsType(mappings, scalarTypes, structs, ts)
 		ts.app("}")
 	case v.Array != nil:
@@ -115,7 +115,7 @@ func renderTypescriptStruct(str *Struct, mappings config.TypeScriptMappings, sca
 	ts.l("// " + str.FullName())
 	ts.l("export interface " + str.Name + " {").ind(1)
 	if str.Map != nil {
-		ts.app("[index:" + str.Map.KeyType + "]:")
+		ts.app("[index:" + tsTypeFromScalarType(str.Map.KeyType) + "]:")
 		str.Map.Value.tsType(mappings, scalarTypes, structs, ts)
 		ts.app(";")
 		ts.nl()
